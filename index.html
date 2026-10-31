@@ -143,6 +143,9 @@ button.go:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
 #knob{position:absolute;left:40px;top:40px;width:40px;height:40px;border-radius:50%;background:#8a7565}
 #eBtn{position:absolute;right:max(24px,env(safe-area-inset-right,0px));bottom:calc(max(36px,env(safe-area-inset-bottom,0px)) + 100px);width:84px;height:84px;border-radius:50%;border:2px solid #a85a1a;background:rgba(120,60,15,.55);color:var(--ink);font-family:var(--display);font-size:30px;display:grid;place-items:center;pointer-events:auto;user-select:none;-webkit-user-select:none;touch-action:none}#eBtn.on{background:var(--blood);border-color:#fff}
 #touch,#touch *{-webkit-touch-callout:none;user-select:none;-webkit-user-select:none}
+.tbtn{position:absolute;top:max(10px,env(safe-area-inset-top,0px));width:46px;height:36px;border-radius:8px;border:2px solid #5a4a40;background:rgba(20,14,12,.55);color:var(--ink);font-family:var(--display);font-size:15px;display:grid;place-items:center;pointer-events:auto;letter-spacing:.06em;touch-action:none}
+#escBtn{left:max(12px,env(safe-area-inset-left,0px))}#pBtn{right:max(12px,env(safe-area-inset-right,0px));display:none}
+.touch #hud{padding-top:56px}.touch #mini{width:104px;height:104px}
 #run{position:absolute;right:max(24px,env(safe-area-inset-right,0px));bottom:max(36px,env(safe-area-inset-bottom,0px));width:84px;height:84px;border-radius:50%;border:2px solid #5a4a40;background:rgba(20,14,12,.5);color:var(--ink);font-family:var(--display);font-size:18px;display:grid;place-items:center;pointer-events:auto;letter-spacing:.06em}
 @media (max-width:520px){#mini{width:96px;height:96px}.bar{width:100px}}
 @media (max-height:560px){#menu .panel{gap:6px!important}#menu .panel h1{font-size:clamp(34px,9vh,54px)}#menu .panel p{display:none}#menu .alts{grid-template-columns:repeat(3,1fr)}#menu button.go{padding:8px 10px;font-size:18px;min-width:0}#menu .alts button.go{font-size:12px;padding:8px 4px}#menu .fs{font-size:12px}#menu .seg button{padding:5px 12px}#fVal{padding:5px 6px}#pause .panel h1,#end .panel h1{font-size:clamp(34px,9vh,54px)}#pause .panel,#end .panel{gap:8px}#pause button.go,#end button.go{padding:8px 10px;min-width:0;width:100%}}
@@ -157,7 +160,7 @@ button.go:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
     <canvas id="mini" width="33" height="33"></canvas>
   </div>
   <div id="toast"></div><button id="act" class="go" hidden>E · Crawl under</button><button id="hold" class="go" hidden>Hold E · Break free</button><div id="warn">The dark is watching</div>
-  <div id="touch"><div id="stick"><div id="knob"></div></div><div id="run">RUN</div><div id="eBtn">E</div></div>
+  <div id="touch"><div id="stick"><div id="knob"></div></div><div id="run">RUN</div><div id="eBtn">E</div><div id="escBtn" class="tbtn">ESC</div><div id="pBtn" class="tbtn">P</div></div>
 
   <div class="overlay" id="menu">
     <div class="panel">
@@ -959,7 +962,7 @@ function growl(){if(!ac)return;const t=ac.currentTime,out=ac.createGain();out.ga
   const ns=ac.createBufferSource(),bp=ac.createBiquadFilter(),ng=ac.createGain();ns.buffer=n;bp.type='bandpass';bp.frequency.setValueAtTime(2200,t);bp.frequency.linearRampToValueAtTime(3600,t+2.5);bp.Q.value=9;ng.gain.setValueAtTime(0,t);ng.gain.linearRampToValueAtTime(.09,t+1.5);ng.gain.linearRampToValueAtTime(0,t+3);ns.connect(bp).connect(ng).connect(out);ns.start(t)}
 
 // ---------- input ----------
-addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyP'&&!e.repeat&&mpS.on&&state==='play'){mpS.cam=(mpS.cam+1)%3;toast(['First person','Third person: behind','Third person: front'][mpS.cam],1200)}if(e.code==='KeyE'){doAct();if(!e.repeat)tapE=true}if(e.code==='KeyM'&&!hard)$('mini').hidden=!$('mini').hidden;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault()});
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyP'&&!e.repeat)mpCycleCam();if(e.code==='KeyE'){doAct();if(!e.repeat)tapE=true}if(e.code==='KeyM'&&!hard)$('mini').hidden=!$('mini').hidden;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault()});
 addEventListener('keyup',e=>keys[e.code]=false);
 let mlSkip=0;function reqLock(){try{const r=canvas.requestPointerLock({unadjustedMovement:true});if(r&&r.catch)r.catch(()=>{try{const r2=canvas.requestPointerLock();if(r2&&r2.catch)r2.catch(()=>{})}catch(_){}})}catch(_){try{canvas.requestPointerLock()}catch(__){}}}
 document.addEventListener('mousemove',e=>{if(state!=='play'&&!(state==='ending'&&endSeq&&endSeq.ph>=2&&endSeq.ph<=4))return;if(document.pointerLockElement===canvas||dragging){const mx=e.movementX||0,my=e.movementY||0;if(mlSkip>0){mlSkip--;return}if(Math.abs(mx)>300||Math.abs(my)>300)return;P.yaw-=mx*.0024*cfg.sens/100;P.pitch=Math.max(-1.1,Math.min(1.1,P.pitch-my*.0024*cfg.sens/100))}});
@@ -973,13 +976,14 @@ const isTouch=matchMedia('(pointer:coarse)').matches;if(isTouch)$('game').classL
 const stick=$('stick'),knob=$('knob');let stickId=null,lookId=null,lastX=0,lastY=0;
 addEventListener('touchstart',e=>{for(const t of e.changedTouches){const r=stick.getBoundingClientRect();
   if(t.target===$('run')||t.target.closest&&t.target.closest('#run')){touchRun=true;continue}
-  if(t.target.closest&&t.target.closest('#eBtn,#jumpBtn,#act,#hold'))continue;
+  if(t.target.closest&&t.target.closest('#eBtn,#jumpBtn,#act,#hold,#escBtn,#pBtn'))continue;
   if(t.clientX>r.left-20&&t.clientX<r.right+20&&t.clientY>r.top-20&&t.clientY<r.bottom+20&&stickId===null){stickId=t.identifier;moveStick(t)}
   else if(lookId===null){lookId=t.identifier;lastX=t.clientX;lastY=t.clientY}}},{passive:true});
 function moveStick(t){const r=stick.getBoundingClientRect();let dx=t.clientX-(r.left+60),dy=t.clientY-(r.top+60);const l=Math.hypot(dx,dy),m=50;if(l>m){dx*=m/l;dy*=m/l}knob.style.left=40+dx+'px';knob.style.top=40+dy+'px';joy.x=dx/m;joy.y=dy/m}
 addEventListener('touchmove',e=>{for(const t of e.changedTouches){if(t.identifier===stickId)moveStick(t);else if(t.identifier===lookId&&state==='play'){P.yaw-=(t.clientX-lastX)*.006;P.pitch=Math.max(-1.1,Math.min(1.1,P.pitch-(t.clientY-lastY)*.004));lastX=t.clientX;lastY=t.clientY}}},{passive:true});
 addEventListener('touchend',e=>{for(const t of e.changedTouches){if(t.identifier===stickId){stickId=null;joy.x=joy.y=0;knob.style.left='40px';knob.style.top='40px'}if(t.identifier===lookId)lookId=null}if(!e.touches.length)touchRun=false},{passive:true});
 
+$('escBtn').addEventListener('pointerdown',e=>{e.preventDefault();if(state==='play'){joy.x=joy.y=0;touchRun=false;touchHold=false;state='paused';$('pause').hidden=false}});$('pBtn').addEventListener('pointerdown',e=>{e.preventDefault();mpCycleCam()});
 {const eb=$('eBtn');const dn=e=>{e.preventDefault();eb.classList.add('on');doAct();tapE=true;touchHold=true};const up=()=>{eb.classList.remove('on');touchHold=false};eb.addEventListener('pointerdown',dn);eb.addEventListener('pointerup',up);eb.addEventListener('pointercancel',up);eb.addEventListener('pointerleave',up);eb.addEventListener('contextmenu',e=>e.preventDefault())}
 // ---------- flow ----------
 function toast(s,ms){const t=$('toast');t.textContent=s;t.style.opacity=1;clearTimeout(toast.h);toast.h=setTimeout(()=>t.style.opacity=0,ms||1800)}
@@ -1083,7 +1087,10 @@ function parseLv(o){const c={name:o.name,g:o.g,S:null,X:null,E:null,F:[],T:[],D:
 const mpS={cam:0,me:null,meKey:'',code:'',on:false,seed:0,room:null,started:false,av:new Map(),last:0,ei:0,dead:0,team:false,subOn:false,dmT:0,dmS:'',dmSeen:new Map(),dseen:new Map()};
 function dmEnc(){let s='',v=0,n=0;for(let y=0;y<W;y++)for(let x=0;x<W;x++){v=v*2+(discovered[y][x]?1:0);if(++n===4){s+=v.toString(16);v=0;n=0}}if(n){v<<=(4-n);s+=v.toString(16)}return s}
 function dmMerge(s){let i=0;for(let y=0;y<W;y++)for(let x=0;x<W;x++){const c=parseInt(s[i>>2]||'0',16)||0;if((c>>(3-(i&3)))&1)discovered[y][x]=true;i++}}
-function mpIn(){const R=mpS.room;let n=0,tot=0;if(R)for(const p of R.peers()){const q=p.presence||{};if(!p.isMe&&q.lv!==level)continue;tot++;if(p.isMe||q.ei===level)n++}return{n,tot,all:n>=tot}}
+function lvKey(){return level+(qq?1000:0)}
+function mpAllWait(){if(!mpS.on||!mpS.room)return true;for(const p of mpS.room.peers()){if(p.isMe)continue;const q=p.presence||{};if(q.lv!==lvKey())continue;if(q.wt!==1)return false}return true}
+function mpCycleCam(){if(mpS.on&&state==='play'){mpS.cam=(mpS.cam+1)%3;toast(['First person','Third person: behind','Third person: front'][mpS.cam],1200)}}
+function mpIn(){const R=mpS.room;let n=0,tot=0;if(R)for(const p of R.peers()){const q=p.presence||{};if(!p.isMe&&q.lv!==lvKey())continue;tot++;if(p.isMe||q.ei===lvKey())n++}return{n,tot,all:n>=tot}}
 function mulb(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
 // direct (peer-to-peer) transport with a room-like interface; star topology, host relays
@@ -1132,7 +1139,7 @@ async function dirEnsure(){if(dir.busy||dir.isDir||(dir.conn&&dir.conn.open))ret
 function dirList(){if(dir.isDir){dir.last=dirLive();dir.on&&dir.on()}else if(dir.conn&&dir.conn.open)try{dir.conn.send({t:'list'})}catch(_){}}
 function dirReg(i){if(dir.isDir)dir.rooms.set(i.code,{...i,t:Date.now()});else if(dir.conn&&dir.conn.open)try{dir.conn.send({t:'reg',...i})}catch(_){}}
 function dirUnreg(code){if(dir.isDir)dir.rooms.delete(code);else if(dir.conn&&dir.conn.open)try{dir.conn.send({t:'unreg',code})}catch(_){}}
-function mpBuild(){mpS.ei=0;mpS.cam=0;if(mpS.on){const o=Math.random;Math.random=mulb(mpS.seed+level*7919);try{build()}finally{Math.random=o}}else build()}
+function mpBuild(){mpS.ei=0;mpS.wt=0;mpS.cam=0;if(mpS.on){const o=Math.random;Math.random=mulb(mpS.seed+level*7919);try{build()}finally{Math.random=o}}else build()}
 const AV_BODY=['Round','Tall','Chunky','Ghost'],AV_HAT=['None','Cap','Top hat','Horns','Cone','Halo'],AV_FACE=['Visor','Eyes','Angry','Dot'];
 function normAv(o,d){const n=(v,m,dv)=>{v=Math.floor(+v);return v>=0&&v<m?v:dv};return{h:n(o.h,360,d.h),b:n(o.b,4,d.b),hat:n(o.hat,6,d.hat),f:n(o.f,4,d.f)}}
 let myAv={h:Math.floor(Math.random()*360),b:0,hat:0,f:1};try{const o=JSON.parse(localStorage.getItem('tubbys-avatar')||'null');if(o&&typeof o==='object')myAv=normAv(o,myAv)}catch(_){}
@@ -1174,19 +1181,19 @@ function mpCam3(){
   camera.up.set(0,1,0);camera.lookAt(hx,hy,hz);
 }
 function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performance.now();
-  if(now-mpS.last>80){mpS.last=now;const pr={x:+P.x.toFixed(2),z:+P.z.toFixed(2),yaw:+P.yaw.toFixed(2),lv:level,pl:(state==='play'||state==='lift')?1:0,ei:mpS.ei||0};
-    if(now-mpS.dmT>400&&discovered&&discovered.length===W){mpS.dmT=now;const ds=dmEnc();if(ds!==mpS.dmS){mpS.dmS=ds;pr.dm=ds;pr.dw=W;pr.dl=level}}
+  if(now-mpS.last>80){mpS.last=now;const pr={x:+P.x.toFixed(2),z:+P.z.toFixed(2),yaw:+P.yaw.toFixed(2),lv:lvKey(),pl:(state==='play'||state==='lift')?1:0,ei:mpS.ei||0,wt:state==='play'?(mpS.wt||0):0};
+    if(now-mpS.dmT>400&&discovered&&discovered.length===W){mpS.dmT=now;const ds=dmEnc();if(ds!==mpS.dmS){mpS.dmS=ds;pr.dm=ds;pr.dw=W;pr.dl=lvKey()}}
     R.presence(pr)}
   const seen=new Set();
   for(const p of R.peers()){if(p.isMe)continue;const q=p.presence;seen.add(p.peer);
-    if(q.dm&&q.dl===level&&q.dw===W&&discovered&&discovered.length===W&&mpS.dmSeen.get(p.peer)!==q.dm){mpS.dmSeen.set(p.peer,q.dm);dmMerge(q.dm)}
-    {const dd=+q.dead||0,ld=mpS.dseen.get(p.peer);if(ld===undefined)mpS.dseen.set(p.peer,dd);else if(dd>ld){mpS.dseen.set(p.peer,dd);if(q.lv===level&&(state==='play'||state==='lift'||state==='descend')){mpS.team=true;try{finish(false)}finally{mpS.team=false}}}}
+    if(q.dm&&q.dl===lvKey()&&q.dw===W&&discovered&&discovered.length===W&&mpS.dmSeen.get(p.peer)!==q.dm){mpS.dmSeen.set(p.peer,q.dm);dmMerge(q.dm)}
+    {const dd=+q.dead||0,ld=mpS.dseen.get(p.peer);if(ld===undefined)mpS.dseen.set(p.peer,dd);else if(dd>ld){mpS.dseen.set(p.peer,dd);if(q.lv===lvKey()&&(state==='play'||state==='lift'||state==='descend')){mpS.team=true;try{finish(false)}finally{mpS.team=false}}}}
     let a=mpS.av.get(p.peer);const nk=String(q.nick||'Player').slice(0,14),av=avOf(q,p.peer),key=nk+'|'+av.h+'.'+av.b+'.'+av.hat+'.'+av.f;
     if(!a||a.key!==key){if(a)scene.remove(a.g);a=mkAv(p.peer,nk,av);a.key=key;mpS.av.set(p.peer,a);scene.add(a.g);a.g.position.set(+q.x||0,0,+q.z||0)}
-    const vis=!!q.pl&&q.lv===level&&typeof q.x==='number';a.g.visible=vis;
+    const vis=!!q.pl&&q.lv===lvKey()&&typeof q.x==='number';a.g.visible=vis;
     if(vis){a.g.position.x+=(q.x-a.g.position.x)*.35;a.g.position.z+=(q.z-a.g.position.z)*.35;a.g.rotation.y=+q.yaw||0}}
   for(const [k,a] of mpS.av)if(!seen.has(k)){scene.remove(a.g);mpS.av.delete(k)}
-  if(state==='play'){let w=0;for(const p of R.peers())if(!p.isMe&&p.presence.lv===level&&p.presence.ei===level)w++;if(w>0){subEl().textContent=w+(w===1?' teammate is':' teammates are')+' waiting in the elevator';mpS.subOn=true}else if(mpS.subOn){subEl().textContent='';mpS.subOn=false}}}
+  if(state==='play'){let w=0;for(const p of R.peers())if(!p.isMe&&p.presence.lv===lvKey()&&p.presence.ei===lvKey())w++;if(w>0){subEl().textContent=w+(w===1?' teammate is':' teammates are')+' waiting in the elevator';mpS.subOn=true}else if(mpS.subOn){subEl().textContent='';mpS.subOn=false}}}
 {
   const nickIn=$('mpNick'),codeIn=$('mpCode');try{nickIn.value=localStorage.getItem('tubbys-nick')||''}catch(_){}
   for(const id of['mpNick','mpCode'])for(const ev of['keydown','keyup'])$(id).addEventListener(ev,e=>e.stopPropagation());
@@ -1200,7 +1207,7 @@ function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performa
     const imHost=!!h&&h.isMe;$('mpStart').style.display=imHost?'':'none';
     if(!mpS.started){msg(ps.length+' player'+(ps.length===1?'':'s')+' in the room'+(imHost?'. Press start when everyone is here.':'. Waiting for the host to start...')+(mpHow==='direct'?(pubCode?' (public room)':' (private room)'):' (via Claude)'))}
     if(h&&h.presence.go&&!mpS.started)launch(h.presence.go)}
-  function launch(seed){if(mpS.started)return;{const pc=$('pauseCode');pc.textContent='Room code: '+mpS.code;pc.hidden=false}mpS.started=true;mpS.on=true;mpS.seed=+seed||1;hard=false;inf=false;startFloor=1;cust=null;$('mp').hidden=true;$('start').onclick()}
+  function launch(seed){if(mpS.started)return;$('pBtn').style.display='grid';{const pc=$('pauseCode');pc.textContent='Room code: '+mpS.code;pc.hidden=false}mpS.started=true;mpS.on=true;mpS.seed=+seed||1;hard=false;inf=false;startFloor=1;cust=null;$('mp').hidden=true;$('start').onclick()}
   async function enter(code,create,pub){
     const nick=(nickIn.value.trim()||'Player').slice(0,14);try{localStorage.setItem('tubbys-nick',nick)}catch(_){}
     msg('Connecting...');let room=null;mpHow='';
@@ -1246,7 +1253,7 @@ function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performa
 renderAch();$('howBtn').onclick=()=>{$('how').hidden=false};$('howClose').onclick=()=>{$('how').hidden=true};{let tr;try{tr=localStorage.getItem('tubRed')}catch(_){}if(tr===null||tr===undefined)tr=got.red?'1':'0';$('tub').classList.toggle('red',tr==='1');$('tub').onclick=()=>{const on=$('tub').classList.toggle('red');try{localStorage.setItem('tubRed',on?'1':'0')}catch(_){}if(on)unlock('red')}};$('act').onclick=doAct;{const h=$('hold');h.addEventListener('pointerdown',()=>{touchHold=true;tapE=true});addEventListener('pointerup',()=>touchHold=false);addEventListener('pointercancel',()=>touchHold=false)}
 $('resume').onclick=()=>{$('pause').hidden=true;state='play';lock()};
 $('again').onclick=()=>{if(state==='won'){if(egg){level=egg.ret;egg=null;qq=false}else if(!cust)level++}else{level=1;egg=null;qq=false}begin()};
-function finish(win){if(!win&&mpS.on&&!mpS.team){mpS.dead++;if(mpS.room)mpS.room.presence({dead:mpS.dead,lv:level})}if(win&&state==='play'){startClimb();return}if(win)floorWon();else streak.clear();fromWin=win;state=win?'won':'lost';if(!win){if(ac&&screamBuf&&screamBuf!=='loading'){const b=ac.createBufferSource();b.buffer=screamBuf;b.connect(ac.destination);b.start()}const v=$('flash');v.style.opacity=1;setTimeout(()=>v.style.opacity=0,150)}if(document.exitPointerLock)document.exitPointerLock();hadLock=false;
+function finish(win){if(!win&&mpS.on&&!mpS.team){mpS.dead++;if(mpS.room)mpS.room.presence({dead:mpS.dead,lv:lvKey()})}if(win&&state==='play'){startClimb();return}if(win)floorWon();else streak.clear();fromWin=win;state=win?'won':'lost';if(!win){if(ac&&screamBuf&&screamBuf!=='loading'){const b=ac.createBufferSource();b.buffer=screamBuf;b.connect(ac.destination);b.start()}const v=$('flash');v.style.opacity=1;setTimeout(()=>v.style.opacity=0,150)}if(document.exitPointerLock)document.exitPointerLock();hadLock=false;
   const s=Math.floor(timeT);$('end').hidden=false;
   $('endTitle').innerHTML=win?'You <em>escaped</em>':'He <em>caught</em> you';
   $('endText').textContent=!win&&mpS.on&&mpS.team?'A teammate was caught. In this room, everyone dies. Start over from floor 1.':cust&&!qq?(win?`${cust.name} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}.`:`Caught in ${cust.name} after ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. He sat on you.`):win&&egg?`${qq?'Floor ???':'Level 0'} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. You climb back up to floor ${egg.ret}.`:win?`Floor ${level} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. The next floor is bigger and he is quicker.`:`Caught on floor ${qq?'???':level} after ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. He sat on you. Start over from floor 1.`;
@@ -1312,7 +1319,7 @@ function tick(){
     $('fade').style.opacity=Math.max(0,Math.min(1,(t-.8)/.7));
     if(t>1.6){egg={ret:level};level=0;begin()}}
   if(state==='lift'){lift.t+=dt;
-    if(mpS.on&&mpS.room&&!lift.go&&lift.t>.85){lift.t=.85;lift.w=true;mpS.ei=level;const a=mpIn();if(a.all){lift.go=true;lift.t=.9;subEl().textContent='';mpS.subOn=false}else{subEl().textContent='Waiting for everyone to board... '+a.n+'/'+a.tot}}
+    if(mpS.on&&mpS.room&&!lift.go&&lift.t>.85){lift.t=.85;lift.w=true;mpS.ei=lvKey();const a=mpIn();if(a.all){lift.go=true;lift.t=.9;subEl().textContent='';mpS.subOn=false}else{subEl().textContent='Waiting for everyone to board... '+a.n+'/'+a.tot}}
     const t=lift.t,e=exitEl;
     const k=Math.min(1,t/.8),ke=1-Math.pow(1-k,2);P.x=lift.x0+(lift.tx-lift.x0)*ke;P.z=lift.z0+(lift.tz-lift.z0)*ke;
     let dy=lift.yaw1-lift.yaw0;dy=Math.atan2(Math.sin(dy),Math.cos(dy));P.yaw=lift.yaw0+dy*ke;P.pitch*=1-ke*.2;
@@ -1352,7 +1359,7 @@ function tick(){
     camera.rotation.set(P.pitch,P.yaw,0);
     P.hidden=hidden||!!(lad&&lad.up&&lad.t>.5)||waitT>8;
     if(!qq&&!inf&&!arrive&&startEl){const se=startEl,rx=P.x-se.cx,rz=P.z-se.cz,lz=rx*se.nx+rz*se.nz,lx=rx*se.nz-rz*se.nx,inE=Math.abs(lx)<.95&&lz<-.4&&lz>-1.8;
-      if(inE&&m<=.05&&!trapped&&!crawl&&!hidden&&!lad){waitT+=dt;if(waitT>=60&&!cust&&!mpS.on)startQQ()}else waitT=0;
+      const wtg=inE&&m<=.05&&!trapped&&!crawl&&!hidden&&!lad;mpS.wt=wtg?1:0;if(wtg&&mpAllWait()){waitT+=dt;if(waitT>=60&&!cust)startQQ()}else waitT=0;
       if(waitT>6)setDoors(se,Math.max(0,1-(waitT-6)/1.2));else if(se.open<1)setDoors(se,Math.min(1,se.open+dt*1.5))}
     nearHole=false;if(hidden&&hideL&&!lad){const q=hideL,rx=P.x-q.cx,rz=P.z-q.cz,lz=rx*q.nx+rz*q.nz,lx=rx*q.nz-rz*q.nx;nearHole=lz<.05&&Math.abs(lx)<1.25}
     nearLv=!!(lever&&!lever.pulled&&!pull&&!hidden&&!lad&&!crawl&&!trapped&&!arrive&&Math.hypot(P.x-lever.px,P.z-lever.pz)<2.1);
