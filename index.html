@@ -243,7 +243,7 @@ button.go:focus-visible{outline:2px solid var(--ink);outline-offset:3px}
   <div class="overlay" id="ach" hidden style="z-index:8"><div class="panel" style="max-height:calc(100% - 8px);overflow:auto"><h1>Achieve<em>ments</em></h1><p id="achSum"></p><div id="achList"></div><button class="go" id="achClose">Back</button></div></div>
   <div id="achToast"></div>
   <div class="overlay" id="pause" hidden>
-    <div class="panel"><h1>Paused</h1><p>Click to get back in. He is not waiting.</p><button class="go" id="resume">Resume</button><button class="go alt" id="toMenu1">Main menu</button></div>
+    <div class="panel"><h1>Paused</h1><p>Click to get back in. He is not waiting.</p><p id="pauseCode" hidden style="font-family:var(--display);font-size:clamp(22px,5vw,34px);letter-spacing:.18em;color:var(--blood)"></p><button class="go" id="resume">Resume</button><button class="go alt" id="toMenu1">Main menu</button></div>
   </div>
 </div>
 
@@ -959,7 +959,7 @@ function growl(){if(!ac)return;const t=ac.currentTime,out=ac.createGain();out.ga
   const ns=ac.createBufferSource(),bp=ac.createBiquadFilter(),ng=ac.createGain();ns.buffer=n;bp.type='bandpass';bp.frequency.setValueAtTime(2200,t);bp.frequency.linearRampToValueAtTime(3600,t+2.5);bp.Q.value=9;ng.gain.setValueAtTime(0,t);ng.gain.linearRampToValueAtTime(.09,t+1.5);ng.gain.linearRampToValueAtTime(0,t+3);ns.connect(bp).connect(ng).connect(out);ns.start(t)}
 
 // ---------- input ----------
-addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyE'){doAct();if(!e.repeat)tapE=true}if(e.code==='KeyM'&&!hard)$('mini').hidden=!$('mini').hidden;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault()});
+addEventListener('keydown',e=>{keys[e.code]=true;if(e.code==='KeyP'&&!e.repeat&&mpS.on&&state==='play'){mpS.cam=(mpS.cam+1)%3;toast(['First person','Third person: behind','Third person: front'][mpS.cam],1200)}if(e.code==='KeyE'){doAct();if(!e.repeat)tapE=true}if(e.code==='KeyM'&&!hard)$('mini').hidden=!$('mini').hidden;if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown','Space'].includes(e.code))e.preventDefault()});
 addEventListener('keyup',e=>keys[e.code]=false);
 let mlSkip=0;function reqLock(){try{const r=canvas.requestPointerLock({unadjustedMovement:true});if(r&&r.catch)r.catch(()=>{try{const r2=canvas.requestPointerLock();if(r2&&r2.catch)r2.catch(()=>{})}catch(_){}})}catch(_){try{canvas.requestPointerLock()}catch(__){}}}
 document.addEventListener('mousemove',e=>{if(state!=='play'&&!(state==='ending'&&endSeq&&endSeq.ph>=2&&endSeq.ph<=4))return;if(document.pointerLockElement===canvas||dragging){const mx=e.movementX||0,my=e.movementY||0;if(mlSkip>0){mlSkip--;return}if(Math.abs(mx)>300||Math.abs(my)>300)return;P.yaw-=mx*.0024*cfg.sens/100;P.pitch=Math.max(-1.1,Math.min(1.1,P.pitch-my*.0024*cfg.sens/100))}});
@@ -1080,7 +1080,10 @@ function parseLv(o){const c={name:o.name,g:o.g,S:null,X:null,E:null,F:[],T:[],D:
 }
 
 // ---------- multiplayer (room capability; presence only) ----------
-const mpS={on:false,seed:0,room:null,started:false,av:new Map(),last:0};
+const mpS={cam:0,me:null,meKey:'',code:'',on:false,seed:0,room:null,started:false,av:new Map(),last:0,ei:0,dead:0,team:false,subOn:false,dmT:0,dmS:'',dmSeen:new Map(),dseen:new Map()};
+function dmEnc(){let s='',v=0,n=0;for(let y=0;y<W;y++)for(let x=0;x<W;x++){v=v*2+(discovered[y][x]?1:0);if(++n===4){s+=v.toString(16);v=0;n=0}}if(n){v<<=(4-n);s+=v.toString(16)}return s}
+function dmMerge(s){let i=0;for(let y=0;y<W;y++)for(let x=0;x<W;x++){const c=parseInt(s[i>>2]||'0',16)||0;if((c>>(3-(i&3)))&1)discovered[y][x]=true;i++}}
+function mpIn(){const R=mpS.room;let n=0,tot=0;if(R)for(const p of R.peers()){const q=p.presence||{};if(!p.isMe&&q.lv!==level)continue;tot++;if(p.isMe||q.ei===level)n++}return{n,tot,all:n>=tot}}
 function mulb(a){return function(){a|=0;a=a+0x6D2B79F5|0;let t=Math.imul(a^a>>>15,1|a);t=t+Math.imul(t^t>>>7,61|t)^t;return((t^t>>>14)>>>0)/4294967296}}
 
 // direct (peer-to-peer) transport with a room-like interface; star topology, host relays
@@ -1129,7 +1132,7 @@ async function dirEnsure(){if(dir.busy||dir.isDir||(dir.conn&&dir.conn.open))ret
 function dirList(){if(dir.isDir){dir.last=dirLive();dir.on&&dir.on()}else if(dir.conn&&dir.conn.open)try{dir.conn.send({t:'list'})}catch(_){}}
 function dirReg(i){if(dir.isDir)dir.rooms.set(i.code,{...i,t:Date.now()});else if(dir.conn&&dir.conn.open)try{dir.conn.send({t:'reg',...i})}catch(_){}}
 function dirUnreg(code){if(dir.isDir)dir.rooms.delete(code);else if(dir.conn&&dir.conn.open)try{dir.conn.send({t:'unreg',code})}catch(_){}}
-function mpBuild(){if(mpS.on){const o=Math.random;Math.random=mulb(mpS.seed+level*7919);try{build()}finally{Math.random=o}}else build()}
+function mpBuild(){mpS.ei=0;mpS.cam=0;if(mpS.on){const o=Math.random;Math.random=mulb(mpS.seed+level*7919);try{build()}finally{Math.random=o}}else build()}
 const AV_BODY=['Round','Tall','Chunky','Ghost'],AV_HAT=['None','Cap','Top hat','Horns','Cone','Halo'],AV_FACE=['Visor','Eyes','Angry','Dot'];
 function normAv(o,d){const n=(v,m,dv)=>{v=Math.floor(+v);return v>=0&&v<m?v:dv};return{h:n(o.h,360,d.h),b:n(o.b,4,d.b),hat:n(o.hat,6,d.hat),f:n(o.f,4,d.f)}}
 let myAv={h:Math.floor(Math.random()*360),b:0,hat:0,f:1};try{const o=JSON.parse(localStorage.getItem('tubbys-avatar')||'null');if(o&&typeof o==='object')myAv=normAv(o,myAv)}catch(_){}
@@ -1156,15 +1159,34 @@ function mkAv(peer,nick,cfg){const {g,top}=buildAvatar(cfg);
   const c=document.createElement('canvas');c.width=256;c.height=64;const x=c.getContext('2d');x.font='bold 34px sans-serif';x.textAlign='center';x.textBaseline='middle';x.lineWidth=6;x.strokeStyle='#000';x.strokeText(nick,128,34);x.fillStyle='#fff';x.fillText(nick,128,34);
   const sp=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true}));sp.scale.set(1.6,.4,1);sp.position.y=top;g.add(sp);
   return{g,nick}}
+
+function mpCam3(){
+  const on=mpS.on&&mpS.cam>0&&state==='play';
+  if(!on){if(mpS.me)mpS.me.visible=false;return}
+  const key=myAv.h+'.'+myAv.b+'.'+myAv.hat+'.'+myAv.f;
+  if(!mpS.me||mpS.meKey!==key){if(mpS.me){scene.remove(mpS.me);mpS.me.traverse(o=>{if(o.geometry)o.geometry.dispose()})}mpS.me=buildAvatar(myAv).g;mpS.meKey=key;scene.add(mpS.me)}
+  const g=mpS.me;g.visible=true;g.position.set(P.x,P.y||0,P.z);g.rotation.y=P.yaw;
+  const hx=P.x,hy=(P.y||0)+1.45,hz=P.z,fx=-Math.sin(P.yaw),fz=-Math.cos(P.yaw),sg=mpS.cam===1?-1:1,D=3.2,cp=Math.cos(P.pitch),sp=Math.sin(P.pitch);
+  let tx=hx+sg*fx*cp*D,ty=hy-sp*D*sg*-1*-1+.35,tz=hz+sg*fz*cp*D;
+  ty=hy+.35-sp*D;
+  let k=1;for(let i=1;i<=12;i++){const q=i/12,x=hx+(tx-hx)*q,z=hz+(tz-hz)*q;if(wallAt(x,z)){k=Math.max(0.12,(i-1.5)/12);break}}
+  camera.position.set(hx+(tx-hx)*k,Math.max(.3,Math.min(H-.3,hy+(ty-hy)*k)),hz+(tz-hz)*k);
+  camera.up.set(0,1,0);camera.lookAt(hx,hy,hz);
+}
 function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performance.now();
-  if(now-mpS.last>80){mpS.last=now;R.presence({x:+P.x.toFixed(2),z:+P.z.toFixed(2),yaw:+P.yaw.toFixed(2),lv:level,pl:(state==='play'||state==='lift')?1:0})}
+  if(now-mpS.last>80){mpS.last=now;const pr={x:+P.x.toFixed(2),z:+P.z.toFixed(2),yaw:+P.yaw.toFixed(2),lv:level,pl:(state==='play'||state==='lift')?1:0,ei:mpS.ei||0};
+    if(now-mpS.dmT>400&&discovered&&discovered.length===W){mpS.dmT=now;const ds=dmEnc();if(ds!==mpS.dmS){mpS.dmS=ds;pr.dm=ds;pr.dw=W;pr.dl=level}}
+    R.presence(pr)}
   const seen=new Set();
   for(const p of R.peers()){if(p.isMe)continue;const q=p.presence;seen.add(p.peer);
+    if(q.dm&&q.dl===level&&q.dw===W&&discovered&&discovered.length===W&&mpS.dmSeen.get(p.peer)!==q.dm){mpS.dmSeen.set(p.peer,q.dm);dmMerge(q.dm)}
+    {const dd=+q.dead||0,ld=mpS.dseen.get(p.peer);if(ld===undefined)mpS.dseen.set(p.peer,dd);else if(dd>ld){mpS.dseen.set(p.peer,dd);if(q.lv===level&&(state==='play'||state==='lift'||state==='descend')){mpS.team=true;try{finish(false)}finally{mpS.team=false}}}}
     let a=mpS.av.get(p.peer);const nk=String(q.nick||'Player').slice(0,14),av=avOf(q,p.peer),key=nk+'|'+av.h+'.'+av.b+'.'+av.hat+'.'+av.f;
     if(!a||a.key!==key){if(a)scene.remove(a.g);a=mkAv(p.peer,nk,av);a.key=key;mpS.av.set(p.peer,a);scene.add(a.g);a.g.position.set(+q.x||0,0,+q.z||0)}
     const vis=!!q.pl&&q.lv===level&&typeof q.x==='number';a.g.visible=vis;
     if(vis){a.g.position.x+=(q.x-a.g.position.x)*.35;a.g.position.z+=(q.z-a.g.position.z)*.35;a.g.rotation.y=+q.yaw||0}}
-  for(const [k,a] of mpS.av)if(!seen.has(k)){scene.remove(a.g);mpS.av.delete(k)}}
+  for(const [k,a] of mpS.av)if(!seen.has(k)){scene.remove(a.g);mpS.av.delete(k)}
+  if(state==='play'){let w=0;for(const p of R.peers())if(!p.isMe&&p.presence.lv===level&&p.presence.ei===level)w++;if(w>0){subEl().textContent=w+(w===1?' teammate is':' teammates are')+' waiting in the elevator';mpS.subOn=true}else if(mpS.subOn){subEl().textContent='';mpS.subOn=false}}}
 {
   const nickIn=$('mpNick'),codeIn=$('mpCode');try{nickIn.value=localStorage.getItem('tubbys-nick')||''}catch(_){}
   for(const id of['mpNick','mpCode'])for(const ev of['keydown','keyup'])$(id).addEventListener(ev,e=>e.stopPropagation());
@@ -1178,7 +1200,7 @@ function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performa
     const imHost=!!h&&h.isMe;$('mpStart').style.display=imHost?'':'none';
     if(!mpS.started){msg(ps.length+' player'+(ps.length===1?'':'s')+' in the room'+(imHost?'. Press start when everyone is here.':'. Waiting for the host to start...')+(mpHow==='direct'?(pubCode?' (public room)':' (private room)'):' (via Claude)'))}
     if(h&&h.presence.go&&!mpS.started)launch(h.presence.go)}
-  function launch(seed){if(mpS.started)return;mpS.started=true;mpS.on=true;mpS.seed=+seed||1;hard=false;inf=false;startFloor=1;cust=null;$('mp').hidden=true;$('start').onclick()}
+  function launch(seed){if(mpS.started)return;{const pc=$('pauseCode');pc.textContent='Room code: '+mpS.code;pc.hidden=false}mpS.started=true;mpS.on=true;mpS.seed=+seed||1;hard=false;inf=false;startFloor=1;cust=null;$('mp').hidden=true;$('start').onclick()}
   async function enter(code,create,pub){
     const nick=(nickIn.value.trim()||'Player').slice(0,14);try{localStorage.setItem('tubbys-nick',nick)}catch(_){}
     msg('Connecting...');let room=null;mpHow='';
@@ -1186,7 +1208,7 @@ function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performa
     if(!room){let R=null;try{R=window.claude&&window.claude.use?await window.claude.use('room'):null}catch(_){}
       if(!R){msg(create?'Could not connect. Check your internet, or open the page in Claude while signed in.':'No room with that code was found (and the Claude connection is unavailable here).',true);return}
       try{room=await R.join('mp-'+code.toLowerCase());mpHow='claude'}catch(e){msg('Could not join the room ('+((e&&e.code)||'error')+').',true);return}}
-    mpS.room=room;myNick=nick;pubCode=(create&&pub&&mpHow==='direct')?code:null;room.presence({nick,host:create?1:null,go:null,av:[myAv.h,myAv.b,myAv.hat,myAv.f]});dirTick();
+    mpS.room=room;mpS.code=code.toUpperCase();myNick=nick;pubCode=(create&&pub&&mpHow==='direct')?code:null;room.presence({nick,host:create?1:null,go:null,av:[myAv.h,myAv.b,myAv.hat,myAv.f]});dirTick();
     $('mpA').style.display='none';$('mpB').style.display='grid';$('mpClose').parentNode.style.display='none';$('mpBig').textContent=code.toUpperCase();
     unP=room.onPeers(render);noHost=0;
     tmr=room.p2p?null:setInterval(()=>{const ps=room.peers();if(hostPeer(ps)){noHost=0;return}if(++noHost>=3){const mn=ps.slice().sort((a,b)=>a.peer<b.peer?-1:1)[0];if(mn&&mn.isMe){room.presence({host:1});noHost=0}}},1000);
@@ -1224,10 +1246,10 @@ function mpTick(){const R=mpS.room;if(!R||!mpS.started)return;const now=performa
 renderAch();$('howBtn').onclick=()=>{$('how').hidden=false};$('howClose').onclick=()=>{$('how').hidden=true};{let tr;try{tr=localStorage.getItem('tubRed')}catch(_){}if(tr===null||tr===undefined)tr=got.red?'1':'0';$('tub').classList.toggle('red',tr==='1');$('tub').onclick=()=>{const on=$('tub').classList.toggle('red');try{localStorage.setItem('tubRed',on?'1':'0')}catch(_){}if(on)unlock('red')}};$('act').onclick=doAct;{const h=$('hold');h.addEventListener('pointerdown',()=>{touchHold=true;tapE=true});addEventListener('pointerup',()=>touchHold=false);addEventListener('pointercancel',()=>touchHold=false)}
 $('resume').onclick=()=>{$('pause').hidden=true;state='play';lock()};
 $('again').onclick=()=>{if(state==='won'){if(egg){level=egg.ret;egg=null;qq=false}else if(!cust)level++}else{level=1;egg=null;qq=false}begin()};
-function finish(win){if(win&&state==='play'){startClimb();return}if(win)floorWon();else streak.clear();fromWin=win;state=win?'won':'lost';if(!win){if(ac&&screamBuf&&screamBuf!=='loading'){const b=ac.createBufferSource();b.buffer=screamBuf;b.connect(ac.destination);b.start()}const v=$('flash');v.style.opacity=1;setTimeout(()=>v.style.opacity=0,150)}if(document.exitPointerLock)document.exitPointerLock();hadLock=false;
+function finish(win){if(!win&&mpS.on&&!mpS.team){mpS.dead++;if(mpS.room)mpS.room.presence({dead:mpS.dead,lv:level})}if(win&&state==='play'){startClimb();return}if(win)floorWon();else streak.clear();fromWin=win;state=win?'won':'lost';if(!win){if(ac&&screamBuf&&screamBuf!=='loading'){const b=ac.createBufferSource();b.buffer=screamBuf;b.connect(ac.destination);b.start()}const v=$('flash');v.style.opacity=1;setTimeout(()=>v.style.opacity=0,150)}if(document.exitPointerLock)document.exitPointerLock();hadLock=false;
   const s=Math.floor(timeT);$('end').hidden=false;
   $('endTitle').innerHTML=win?'You <em>escaped</em>':'He <em>caught</em> you';
-  $('endText').textContent=cust&&!qq?(win?`${cust.name} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}.`:`Caught in ${cust.name} after ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. He sat on you.`):win&&egg?`${qq?'Floor ???':'Level 0'} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. You climb back up to floor ${egg.ret}.`:win?`Floor ${level} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. The next floor is bigger and he is quicker.`:`Caught on floor ${qq?'???':level} after ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. He sat on you. Start over from floor 1.`;
+  $('endText').textContent=!win&&mpS.on&&mpS.team?'A teammate was caught. In this room, everyone dies. Start over from floor 1.':cust&&!qq?(win?`${cust.name} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}.`:`Caught in ${cust.name} after ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. He sat on you.`):win&&egg?`${qq?'Floor ???':'Level 0'} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. You climb back up to floor ${egg.ret}.`:win?`Floor ${level} cleared in ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. The next floor is bigger and he is quicker.`:`Caught on floor ${qq?'???':level} after ${Math.floor(s/60)}:${String(s%60).padStart(2,'0')}. He sat on you. Start over from floor 1.`;
   $('again').textContent=cust&&!qq?(win?'Play again':'Run again'):win?(egg?'Back up':'Next floor'):'Run again';$('vignette').style.opacity=0}
 
 // ---------- loop ----------
@@ -1289,7 +1311,9 @@ function tick(){
     desc.c-=dt;if(desc.c<=0){clink();desc.c=.25}
     $('fade').style.opacity=Math.max(0,Math.min(1,(t-.8)/.7));
     if(t>1.6){egg={ret:level};level=0;begin()}}
-  if(state==='lift'){lift.t+=dt;const t=lift.t,e=exitEl;
+  if(state==='lift'){lift.t+=dt;
+    if(mpS.on&&mpS.room&&!lift.go&&lift.t>.85){lift.t=.85;lift.w=true;mpS.ei=level;const a=mpIn();if(a.all){lift.go=true;lift.t=.9;subEl().textContent='';mpS.subOn=false}else{subEl().textContent='Waiting for everyone to board... '+a.n+'/'+a.tot}}
+    const t=lift.t,e=exitEl;
     const k=Math.min(1,t/.8),ke=1-Math.pow(1-k,2);P.x=lift.x0+(lift.tx-lift.x0)*ke;P.z=lift.z0+(lift.tz-lift.z0)*ke;
     let dy=lift.yaw1-lift.yaw0;dy=Math.atan2(Math.sin(dy),Math.cos(dy));P.yaw=lift.yaw0+dy*ke;P.pitch*=1-ke*.2;
     if(t>.9&&!lift.d1){lift.d1=true;ding(.3)}
@@ -1410,6 +1434,7 @@ function tick(){
     geoT-=dt;if(geoT<=0){geoT=1;if(level>5&&!got.geo&&discovered){let all=true;for(let y=1;y<W-1&&all;y++)for(let x=1;x<W-1;x++)if(grid[y][x]===0&&!discovered[y][x]){all=false;break}if(all)unlock('geo')}}
     drawMini();
   }
+  mpCam3();
   renderer.render(scene,camera);
 }
 function drawMini(){
